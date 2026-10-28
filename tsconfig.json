@@ -1,0 +1,26 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "types": ["jest"],
+    // Faz o tsc resolver import 'foo' para foo.native.ts/foo.web.ts (mesma convenção do Metro)
+    // em vez de só foo.ts, para módulos com implementação por plataforma (ver src/platform).
+    // Prioriza .native — typecheck único cobre a variante nativa; a .web é verificada pelo
+    // próprio build (`expo export --platform web`), que resolve a extensão certa por conta própria.
+    "moduleSuffixes": [".native", ".web", ""],
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@/assets/*": [
+        "./assets/*"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+  ]
+}

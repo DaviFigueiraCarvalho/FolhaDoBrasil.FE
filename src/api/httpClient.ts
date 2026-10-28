@@ -1,0 +1,32 @@
+import { ApiError, NetworkError, apiErrorFromResponse } from './apiError'
+
+// Sem EXPO_PUBLIC_API_BASE_URL (sem barra final), as chamadas vão para a mesma origem.
+const BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL ?? '').trim().replace(/\/+$/, '')
+
+export interface ApiRequestOptions {
+  signal?: AbortSignal
+}
+
+// Só leituras públicas (GET): o site de notícias não tem login nem token.
+export async function apiRequest<T = unknown>(path: string, { signal }: ApiRequestOptions = {}): Promise<T> {
+  let response: Response
+  try {
+    response = await fetch(`${BASE_URL}${path}`, { headers: { Accept: 'application/json' }, signal })
+  } catch (cause) {
+    if (cause instanceof Error && cause.name === 'AbortError') throw cause
+    throw new NetworkError(cause)
+  }
+
+  const text = await response.text()
+  let body: unknown = null
+  try {
+    body = text ? JSON.parse(text) : null
+  } catch {
+    body = text
+  }
+
+  if (!response.ok) throw apiErrorFromResponse(response.status, body)
+  return body as T
+}
+
+export { ApiError, NetworkError }

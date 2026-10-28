@@ -1,0 +1,13 @@
+# `docker compose up -d --build` — Folha do Brasil isolada.
+#   NEWS_API_BASE_URL  URL da API vista pelo BROWSER (embutida no build). Padrão http://localhost:8080
+#   NEWS_PORT          porta no host. Padrão 8092
+services:
+  news:
+    build:
+      context: .
+      args:
+        EXPO_PUBLIC_API_BASE_URL: ${NEWS_API_BASE_URL:-http://localhost:8080}
+    container_name: folha-do-brasil
+    restart: unless-stopped
+    ports:
+      - "${NEWS_PORT:-8092}:80"

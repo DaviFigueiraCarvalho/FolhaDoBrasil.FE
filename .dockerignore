@@ -1,0 +1,11 @@
+node_modules
+dist
+.expo
+.git
+.claude
+.vscode
+.env
+.env.*
+!.env.example
+Dockerfile
+docker-compose*.yml
