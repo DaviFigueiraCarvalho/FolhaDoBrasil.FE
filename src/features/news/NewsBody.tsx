@@ -11,7 +11,13 @@ export interface NewsPost {
   body: string
   imageUrl: string | null
   publishedAtUtc: string
-  isFeatured?: boolean
+  viewCount: number
+  topicId: number | null
+}
+
+export interface NewsTopic {
+  id: number
+  name: string
 }
 
 /** Capa da notícia: `imageUrl` ou, na falta dela, a primeira imagem do corpo. */

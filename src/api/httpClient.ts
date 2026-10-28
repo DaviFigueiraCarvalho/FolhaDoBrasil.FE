@@ -4,14 +4,15 @@ import { ApiError, NetworkError, apiErrorFromResponse } from './apiError'
 const BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL ?? '').trim().replace(/\/+$/, '')
 
 export interface ApiRequestOptions {
+  method?: 'GET' | 'POST'
   signal?: AbortSignal
 }
 
-// Só leituras públicas (GET): o site de notícias não tem login nem token.
-export async function apiRequest<T = unknown>(path: string, { signal }: ApiRequestOptions = {}): Promise<T> {
+// Só chamadas públicas (leituras e a contagem de acessos): o site de notícias não tem login nem token.
+export async function apiRequest<T = unknown>(path: string, { method = 'GET', signal }: ApiRequestOptions = {}): Promise<T> {
   let response: Response
   try {
-    response = await fetch(`${BASE_URL}${path}`, { headers: { Accept: 'application/json' }, signal })
+    response = await fetch(`${BASE_URL}${path}`, { method, headers: { Accept: 'application/json' }, signal })
   } catch (cause) {
     if (cause instanceof Error && cause.name === 'AbortError') throw cause
     throw new NetworkError(cause)

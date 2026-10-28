@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type ViewStyle } from 'react-native'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type DimensionValue, type ViewStyle } from 'react-native'
 import { Image } from 'expo-image'
 import WebPortal from '../../platform/WebPortal'
 import { AsyncState, Screen, Surface, Text } from '../../components'
@@ -9,9 +9,13 @@ import { useApiResource } from '../../hooks/useApiResource'
 import { formatDateTime } from '../../utils/format'
 import { colors, radius, spacing } from '../../theme'
 import FeaturedCarousel from './FeaturedCarousel'
-import { NewsBody, PostImage, coverUrl, excerpt, type NewsPost } from './NewsBody'
+import Masthead from './TopicsDrawer'
+import { registerView } from './registerView'
+import { NewsBody, PostImage, coverUrl, excerpt, type NewsPost, type NewsTopic } from './NewsBody'
 
 const HOVER_DELAY_MS = 250
+const TOP_COUNT = 5
+const ROW_CARD_WIDTH = 220
 const SCROLL_IDLE_MS = 150 // sem rolar por isso = "parou de rolar"
 
 // Colunas por largura: celular 2–3, desktop 4–5. A prévia do texto só cabe do desktop em diante.
@@ -23,20 +27,20 @@ function useGrid() {
 
 function NewsCard({
   post,
-  columns,
+  cardWidth,
   showExcerpt,
   onHover,
   onPress,
 }: {
   post: NewsPost
-  columns: number
+  cardWidth: DimensionValue
   showExcerpt: boolean
   onHover: (hovering: boolean) => void
   onPress: () => void
 }) {
   const cover = coverUrl(post)
   return (
-    <View style={[styles.cell, { width: `${100 / columns}%` }]}>
+    <View style={[styles.cell, { width: cardWidth }]}>
       <Pressable
         onPress={onPress}
         onHoverIn={() => onHover(true)}
@@ -63,6 +67,17 @@ function NewsCard({
   )
 }
 
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <View style={styles.section}>
+      <Text variant="title" color="textPrimary" accessibilityRole="header">
+        {title}
+      </Text>
+      {children}
+    </View>
+  )
+}
+
 function FullPost({ post }: { post: NewsPost }) {
   // Só a capa explícita: a do card pode ser a 1ª imagem do corpo, que já aparece no texto.
   return (
@@ -81,11 +96,12 @@ function FullPost({ post }: { post: NewsPost }) {
 
 // GET /api/v2/news — público (50 mais recentes). Grid de miniaturas; no desktop, passar o mouse mostra
 // a notícia em tela cheia (só enquanto o mouse está no card) e clicar/tocar fixa em tela cheia.
-export default function NewsScreen() {
+export default function NewsScreen({ topicId }: { topicId?: number }) {
   const { data: posts, isLoading, isError, error, refetch } = useApiResource(
     (signal) => apiRequest<NewsPost[]>('/api/v2/news', { signal }),
     [],
   )
+  const { data: topicList } = useApiResource((signal) => apiRequest<NewsTopic[]>('/api/v2/news/topics', { signal }), [])
   const { columns, showExcerpt } = useGrid()
   const [hoveredId, setHoveredId] = useState<number | null>(null)
   const [pinned, setPinned] = useState<NewsPost | null>(null)
@@ -148,44 +164,79 @@ export default function NewsScreen() {
     }
   }, [])
 
-  const featured = posts?.filter((post) => post.isFeatured) ?? []
+  const topics = topicList ?? []
+  const all = posts ?? []
+  // Mais acessados primeiro (empate: o mais novo). Só na home; quem está no carrossel não repete abaixo.
+  const top =
+    topicId === undefined
+      ? [...all].sort((a, b) => b.viewCount - a.viewCount || b.publishedAtUtc.localeCompare(a.publishedAtUtc)).slice(0, TOP_COUNT)
+      : []
+  const inCarousel = new Set(top.map((post) => post.id))
+  const rest = all.filter((post) => !inCarousel.has(post.id))
+  const topicName = topics.find((topic) => topic.id === topicId)?.name
+  const topicPosts = all.filter((post) => post.topicId === topicId)
+  const sections = topics.map((topic) => ({ topic, posts: rest.filter((post) => post.topicId === topic.id) })).filter((section) => section.posts.length > 0)
+  const known = new Set(topics.map((topic) => topic.id))
+  const others = rest.filter((post) => post.topicId === null || !known.has(post.topicId))
+
+  function openPost(post: NewsPost) {
+    setHoveredId(null)
+    setPinned(post)
+    registerView(post.id)
+  }
+
+  const card = (post: NewsPost, cardWidth: DimensionValue) => (
+    <NewsCard key={post.id} post={post} cardWidth={cardWidth} showExcerpt={showExcerpt} onHover={(hovering) => handleHover(post.id, hovering)} onPress={() => openPost(post)} />
+  )
+  const gridWidth: DimensionValue = `${100 / columns}%`
   const hoveredPost = pinned ? null : (posts?.find((post) => post.id === hoveredId) ?? null)
 
   return (
     <Screen scroll edges={['left', 'right']}>
-      <View style={styles.masthead}>
-        <Image source={require('../../../assets/images/logo.png')} style={styles.logo} contentFit="contain" />
-        <Text variant="display" color="textPrimary" accessibilityRole="header">
-          Folha do Brasil
-        </Text>
-      </View>
+      <Masthead topics={topics} activeTopicId={topicId} />
 
       <AsyncState
         isLoading={isLoading}
         isError={isError}
         error={error as DisplayableError | null}
         onRetry={refetch}
-        isEmpty={!isLoading && !isError && (posts?.length ?? 0) === 0}
+        isEmpty={!isLoading && !isError && all.length === 0}
         emptyTitle="Sem notícias"
         emptyDescription="Nada publicado por enquanto."
         loadingLabel="Carregando notícias…"
       >
-        {featured.length > 0 && <FeaturedCarousel posts={featured} onOpen={(post) => { setHoveredId(null); setPinned(post) }} />}
-        <View style={styles.grid}>
-          {posts?.map((post) => (
-            <NewsCard
-              key={post.id}
-              post={post}
-              columns={columns}
-              showExcerpt={showExcerpt}
-              onHover={(hovering) => handleHover(post.id, hovering)}
-              onPress={() => {
-                setHoveredId(null)
-                setPinned(post)
-              }}
-            />
-          ))}
-        </View>
+        {topicId !== undefined ? (
+          <Section title={topicName ?? 'Tópico'}>
+            {topicPosts.length === 0 ? (
+              <Text variant="body" color="textSecondary">
+                Nenhuma notícia neste tópico por enquanto.
+              </Text>
+            ) : (
+              <View style={styles.grid}>{topicPosts.map((post) => card(post, gridWidth))}</View>
+            )}
+          </Section>
+        ) : (
+          <>
+            {top.length > 0 && (
+              <Section title="Notícias Mais Relevantes">
+                <FeaturedCarousel posts={top} onOpen={openPost} />
+              </Section>
+            )}
+            {sections.map(({ topic, posts: topicRows }) => (
+              <Section key={topic.id} title={topic.name}>
+                {/* Seção deslizante: fileira horizontal que rola de lado, como o carrossel do topo. */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+                  {topicRows.map((post) => card(post, ROW_CARD_WIDTH))}
+                </ScrollView>
+              </Section>
+            ))}
+            {others.length > 0 && (
+              <Section title={sections.length > 0 ? 'Outras notícias' : 'Últimas notícias'}>
+                <View style={styles.grid}>{others.map((post) => card(post, gridWidth))}</View>
+              </Section>
+            )}
+          </>
+        )}
       </AsyncState>
 
       {/* Prévia por hover (web): tela cheia, mas sem capturar o mouse — assim o hover continua no card
@@ -224,8 +275,8 @@ export default function NewsScreen() {
 const WEB_FIXED = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 } as unknown as ViewStyle
 
 const styles = StyleSheet.create({
-  masthead: { flexDirection: 'row', alignItems: 'center', gap: spacing.m, paddingBottom: spacing.s, borderBottomWidth: 2, borderBottomColor: colors.accent },
-  logo: { width: 56, height: 56, borderRadius: radius.s },
+  section: { gap: spacing.s },
+  row: { paddingVertical: spacing.xs },
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -spacing.xs },
   cell: { padding: spacing.xs },
   pressable: { flex: 1 },
