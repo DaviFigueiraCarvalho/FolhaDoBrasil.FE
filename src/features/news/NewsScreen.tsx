@@ -9,13 +9,14 @@ import { useApiResource } from '../../hooks/useApiResource'
 import { formatDateTime } from '../../utils/format'
 import { colors, radius, spacing } from '../../theme'
 import FeaturedCarousel from './FeaturedCarousel'
-import Masthead from './TopicsDrawer'
+import Masthead from './Masthead'
+import TopicRow from './TopicRow'
+import { useRouter } from 'expo-router'
 import { registerView } from './registerView'
 import { NewsBody, PostImage, coverUrl, excerpt, type NewsPost, type NewsTopic } from './NewsBody'
 
 const HOVER_DELAY_MS = 250
 const TOP_COUNT = 5
-const ROW_CARD_WIDTH = 220
 const SCROLL_IDLE_MS = 150 // sem rolar por isso = "parou de rolar"
 
 // Colunas por largura: celular 2–3, desktop 4–5. A prévia do texto só cabe do desktop em diante.
@@ -102,6 +103,7 @@ export default function NewsScreen({ topicId }: { topicId?: number }) {
     [],
   )
   const { data: topicList } = useApiResource((signal) => apiRequest<NewsTopic[]>('/api/v2/news/topics', { signal }), [])
+  const router = useRouter()
   const { columns, showExcerpt } = useGrid()
   const [hoveredId, setHoveredId] = useState<number | null>(null)
   const [pinned, setPinned] = useState<NewsPost | null>(null)
@@ -193,7 +195,7 @@ export default function NewsScreen({ topicId }: { topicId?: number }) {
 
   return (
     <Screen scroll edges={['left', 'right']}>
-      <Masthead topics={topics} activeTopicId={topicId} />
+      <Masthead />
 
       <AsyncState
         isLoading={isLoading}
@@ -223,12 +225,13 @@ export default function NewsScreen({ topicId }: { topicId?: number }) {
               </Section>
             )}
             {sections.map(({ topic, posts: topicRows }) => (
-              <Section key={topic.id} title={topic.name}>
-                {/* Seção deslizante: fileira horizontal que rola de lado, como o carrossel do topo. */}
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-                  {topicRows.map((post) => card(post, ROW_CARD_WIDTH))}
-                </ScrollView>
-              </Section>
+              <TopicRow
+                key={topic.id}
+                title={topic.name}
+                posts={topicRows}
+                renderCard={card}
+                onSeeAll={() => router.push({ pathname: '/topico', params: { id: String(topic.id) } })}
+              />
             ))}
             {others.length > 0 && (
               <Section title={sections.length > 0 ? 'Outras notícias' : 'Últimas notícias'}>
@@ -276,7 +279,6 @@ const WEB_FIXED = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 } as
 
 const styles = StyleSheet.create({
   section: { gap: spacing.s },
-  row: { paddingVertical: spacing.xs },
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -spacing.xs },
   cell: { padding: spacing.xs },
   pressable: { flex: 1 },
