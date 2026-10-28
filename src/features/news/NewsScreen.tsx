@@ -202,7 +202,7 @@ export default function NewsScreen() {
       <Modal visible={pinned !== null} transparent animationType="fade" onRequestClose={closePinned} statusBarTranslucent>
         <Pressable style={styles.pinnedBackdrop} onPress={closePinned} accessibilityRole="none">
           <ScrollView contentContainerStyle={styles.fullScroll} onStartShouldSetResponder={() => true}>
-            <Pressable onPress={(event) => event.stopPropagation()} accessibilityRole="none">
+            <Pressable onPress={(event) => event.stopPropagation()} accessibilityRole="none" style={styles.fullWrap}>
               {pinned && <FullPost post={pinned} />}
             </Pressable>
           </ScrollView>
@@ -233,6 +233,7 @@ const styles = StyleSheet.create({
   hoverOverlay: { backgroundColor: 'rgba(12, 11, 16, 0.94)', zIndex: 1000 },
   pinnedBackdrop: { flex: 1, backgroundColor: 'rgba(12, 11, 16, 0.94)' },
   fullScroll: { alignItems: 'center', padding: spacing.l, paddingTop: spacing.xxxl },
+  fullWrap: { width: '100%', maxWidth: 900 },
   fullPanel: { width: '100%', maxWidth: 900, gap: spacing.s },
   close: { position: 'absolute', top: spacing.m, right: spacing.l, minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.full },
 })
