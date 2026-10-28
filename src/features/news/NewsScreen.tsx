@@ -10,13 +10,24 @@ import { formatDateTime } from '../../utils/format'
 import { colors, radius, spacing } from '../../theme'
 import FeaturedCarousel from './FeaturedCarousel'
 import Masthead from './Masthead'
-import TopicColumns from './TopicColumns'
+import TopicRows from './TopicRows'
+import TopicSearch from './TopicSearch'
+import PostRow from './PostRow'
+import BackButton from './BackButton'
+import { inPeriod, searchTopics, type Period } from './search'
 import { useRouter } from 'expo-router'
 import { registerView } from './registerView'
 import { NewsBody, PostImage, coverUrl, excerpt, type NewsPost, type NewsTopic } from './NewsBody'
 
 const HOVER_DELAY_MS = 250
 const TOP_COUNT = 5
+const LATEST_COUNT = 10
+const PERIODS: { key: Period; label: string }[] = [
+  { key: 'all', label: 'Todas' },
+  { key: 'day', label: 'Hoje' },
+  { key: 'week', label: 'Semana' },
+  { key: 'year', label: 'Ano' },
+]
 const SCROLL_IDLE_MS = 150 // sem rolar por isso = "parou de rolar"
 
 // Colunas por largura: celular 2–3, desktop 4–5. A prévia do texto só cabe do desktop em diante.
@@ -97,7 +108,7 @@ function FullPost({ post }: { post: NewsPost }) {
 
 // GET /api/v2/news — público (50 mais recentes). Grid de miniaturas; no desktop, passar o mouse mostra
 // a notícia em tela cheia (só enquanto o mouse está no card) e clicar/tocar fixa em tela cheia.
-export default function NewsScreen({ topicId, allTopics = false }: { topicId?: number; allTopics?: boolean }) {
+export default function NewsScreen({ topicId, allTopics = false, latest = false }: { topicId?: number; allTopics?: boolean; latest?: boolean }) {
   const { data: posts, isLoading, isError, error, refetch } = useApiResource(
     (signal) => apiRequest<NewsPost[]>('/api/v2/news', { signal }),
     [],
@@ -170,7 +181,7 @@ export default function NewsScreen({ topicId, allTopics = false }: { topicId?: n
   const all = posts ?? []
   // Mais acessados primeiro (empate: o mais novo). Só na home; quem está no carrossel não repete abaixo.
   const top =
-    topicId === undefined && !allTopics
+    topicId === undefined && !allTopics && !latest
       ? [...all].sort((a, b) => b.viewCount - a.viewCount || b.publishedAtUtc.localeCompare(a.publishedAtUtc)).slice(0, TOP_COUNT)
       : []
   const inCarousel = new Set(top.map((post) => post.id))
@@ -178,9 +189,14 @@ export default function NewsScreen({ topicId, allTopics = false }: { topicId?: n
   const topicName = topics.find((topic) => topic.id === topicId)?.name
   const topicPosts = all.filter((post) => post.topicId === topicId)
   const sections = topics.map((topic) => ({ topic, posts: rest.filter((post) => post.topicId === topic.id) })).filter((section) => section.posts.length > 0)
-  const known = new Set(topics.map((topic) => topic.id))
   const allSections = topics.map((topic) => ({ topic, posts: all.filter((post) => post.topicId === topic.id) })).filter((section) => section.posts.length > 0)
-  const others = rest.filter((post) => post.topicId === null || !known.has(post.topicId))
+  const latestRow = [...rest].sort((a, b) => b.publishedAtUtc.localeCompare(a.publishedAtUtc)).slice(0, LATEST_COUNT)
+  const [query, setQuery] = useState('')
+  const [period, setPeriod] = useState<Period>('all')
+  const matches = searchTopics(query, topics)
+  const matchedIds = new Set(matches.map((topic) => topic.id))
+  const visibleSections = query.trim() ? allSections.filter((section) => matchedIds.has(section.topic.id)) : allSections
+  const latestAll = [...all].sort((a, b) => b.publishedAtUtc.localeCompare(a.publishedAtUtc)).filter((post) => inPeriod(post.publishedAtUtc, period))
 
   function openPost(post: NewsPost) {
     setHoveredId(null)
@@ -197,6 +213,7 @@ export default function NewsScreen({ topicId, allTopics = false }: { topicId?: n
   return (
     <Screen scroll edges={['left', 'right']}>
       <Masthead />
+      {(topicId !== undefined || allTopics || latest) && <BackButton />}
 
       <AsyncState
         isLoading={isLoading}
@@ -218,14 +235,39 @@ export default function NewsScreen({ topicId, allTopics = false }: { topicId?: n
               <View style={styles.grid}>{topicPosts.map((post) => card(post, gridWidth))}</View>
             )}
           </Section>
+        ) : latest ? (
+          <Section title="Últimas notícias">
+            <View style={styles.chips}>
+              {PERIODS.map(({ key, label }) => (
+                <Pressable key={key} onPress={() => setPeriod(key)} accessibilityRole="button" accessibilityState={{ selected: period === key }} style={[styles.chip, period === key && styles.chipActive]}>
+                  <Text variant="label" color={period === key ? 'onAccent' : 'textPrimary'}>
+                    {label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            {latestAll.length === 0 ? (
+              <Text variant="body" color="textSecondary">
+                Nenhuma notícia neste período.
+              </Text>
+            ) : (
+              <View style={styles.grid}>{latestAll.map((post) => card(post, gridWidth))}</View>
+            )}
+          </Section>
         ) : allTopics ? (
-          <TopicColumns
-            wrap
-            sections={allSections}
-            onHover={(post, hovering) => handleHover(post.id, hovering)}
-            onOpen={openPost}
+          <>
+          <TopicSearch
+            query={query}
+            onChange={setQuery}
+            matches={matches}
+            onPick={(topic) => router.push({ pathname: '/topico', params: { id: String(topic.id) } })}
+          />
+          <TopicRows
+            sections={visibleSections}
+            renderCard={card}
             onSeeAll={(topic) => router.push({ pathname: '/topico', params: { id: String(topic.id) } })}
           />
+          </>
         ) : (
           <>
             {top.length > 0 && (
@@ -233,19 +275,16 @@ export default function NewsScreen({ topicId, allTopics = false }: { topicId?: n
                 <FeaturedCarousel posts={top} onOpen={openPost} />
               </Section>
             )}
+            {latestRow.length > 0 && (
+              <PostRow title="Últimas notícias" posts={latestRow} renderCard={card} actionLabel="Ver todas as últimas notícias" onAction={() => router.push('/ultimas')} />
+            )}
             {sections.length > 0 && (
-              <TopicColumns
+              <TopicRows
                 sections={sections}
-                onHover={(post, hovering) => handleHover(post.id, hovering)}
-                onOpen={openPost}
+                renderCard={card}
                 onSeeAll={(topic) => router.push({ pathname: '/topico', params: { id: String(topic.id) } })}
                 onSeeAllTopics={() => router.push('/topicos')}
               />
-            )}
-            {others.length > 0 && (
-              <Section title={sections.length > 0 ? 'Outras notícias' : 'Últimas notícias'}>
-                <View style={styles.grid}>{others.map((post) => card(post, gridWidth))}</View>
-              </Section>
             )}
           </>
         )}
@@ -288,6 +327,9 @@ const WEB_FIXED = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 } as
 
 const styles = StyleSheet.create({
   section: { gap: spacing.s },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s },
+  chip: { minHeight: 40, paddingHorizontal: spacing.l, borderRadius: radius.full, justifyContent: 'center', backgroundColor: colors.surface },
+  chipActive: { backgroundColor: colors.accent },
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -spacing.xs },
   cell: { padding: spacing.xs },
   pressable: { flex: 1 },
