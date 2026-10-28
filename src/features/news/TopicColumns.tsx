@@ -62,7 +62,7 @@ export default function TopicColumns({
     <>
         {sections.map(({ topic, posts }) => (
           <View key={topic.id} style={[styles.column, { width: COLUMN_WIDTH }]}>
-            <Text variant="heading" color="accent" accessibilityRole="header" numberOfLines={1}>
+            <Text variant="heading" color="accentDim" accessibilityRole="header" numberOfLines={1}>
               {topic.name}
             </Text>
             <View style={styles.items}>

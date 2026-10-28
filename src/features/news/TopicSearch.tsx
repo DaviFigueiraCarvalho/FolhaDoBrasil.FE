@@ -41,7 +41,7 @@ export default function TopicSearch({
           ) : (
             matches.slice(0, MAX_SUGGESTIONS).map((topic, index) => (
               <Pressable key={topic.id} onPress={() => onPick(topic)} accessibilityRole="button" style={styles.suggestion}>
-                <Text variant="bodyStrong" color={index === 0 ? 'accent' : 'textPrimary'}>
+                <Text variant="bodyStrong" color={index === 0 ? 'accentDim' : 'textPrimary'}>
                   {index === 0 ? `Você quis dizer: ${topic.name}` : topic.name}
                 </Text>
               </Pressable>

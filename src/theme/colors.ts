@@ -1,25 +1,25 @@
-// Paleta da marca Folha do Brasil: azul profundo do fundo, verde da folha, ouro do losango.
+// Paleta da marca Folha do Brasil sobre fundo branco: azul-marinho no texto, ouro e verde nos destaques.
 export const colors = {
-  background: '#0b2a6b',
-  backgroundAlt: '#0a2358',
-  surface: '#103580',
-  surfaceRaised: '#143d94',
-  surfaceHighlight: '#1b4aa8',
-  border: '#2a5bc0',
+  background: '#ffffff',
+  backgroundAlt: '#f4f6fb',
+  surface: '#e9eef8',
+  surfaceRaised: '#f4f6fb',
+  surfaceHighlight: '#dbe4f5',
+  border: '#cfd9ec',
 
-  accent: '#e3b94a', // ouro
-  accentDim: '#a8872b',
-  danger: '#e0574a',
-  dangerGlow: 'rgba(224, 87, 74, 0.35)',
+  accent: '#e3b94a', // ouro (botões e destaques sobre fundo escuro)
+  accentDim: '#8a6d12', // ouro escuro, legível como texto sobre claro
+  danger: '#c0392b',
+  dangerGlow: 'rgba(192, 57, 43, 0.35)',
   primary: '#1f9d4d', // verde
   primaryGlow: 'rgba(31, 157, 77, 0.45)',
-  success: '#2fbf6b',
-  successGlow: 'rgba(47, 191, 107, 0.35)',
+  success: '#1f9d4d',
+  successGlow: 'rgba(31, 157, 77, 0.35)',
 
-  textPrimary: '#f6f3e8',
-  textSecondary: '#d6dcee',
-  textMuted: '#a5b3d6',
-  textFaint: '#7b8cb8',
+  textPrimary: '#0b2a6b',
+  textSecondary: '#2b3f6e',
+  textMuted: '#5b6a8c',
+  textFaint: '#8793ae',
 
   onAccent: '#1a1405',
   white: '#ffffff',
