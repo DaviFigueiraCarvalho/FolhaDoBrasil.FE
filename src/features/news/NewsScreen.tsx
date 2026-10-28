@@ -10,7 +10,7 @@ import { formatDateTime } from '../../utils/format'
 import { colors, radius, spacing } from '../../theme'
 import FeaturedCarousel from './FeaturedCarousel'
 import Masthead from './Masthead'
-import TopicRow from './TopicRow'
+import TopicColumns from './TopicColumns'
 import { useRouter } from 'expo-router'
 import { registerView } from './registerView'
 import { NewsBody, PostImage, coverUrl, excerpt, type NewsPost, type NewsTopic } from './NewsBody'
@@ -224,15 +224,14 @@ export default function NewsScreen({ topicId }: { topicId?: number }) {
                 <FeaturedCarousel posts={top} onOpen={openPost} />
               </Section>
             )}
-            {sections.map(({ topic, posts: topicRows }) => (
-              <TopicRow
-                key={topic.id}
-                title={topic.name}
-                posts={topicRows}
-                renderCard={card}
-                onSeeAll={() => router.push({ pathname: '/topico', params: { id: String(topic.id) } })}
+            {sections.length > 0 && (
+              <TopicColumns
+                sections={sections}
+                onHover={(post, hovering) => handleHover(post.id, hovering)}
+                onOpen={openPost}
+                onSeeAll={(topic) => router.push({ pathname: '/topico', params: { id: String(topic.id) } })}
               />
-            ))}
+            )}
             {others.length > 0 && (
               <Section title={sections.length > 0 ? 'Outras notícias' : 'Últimas notícias'}>
                 <View style={styles.grid}>{others.map((post) => card(post, gridWidth))}</View>
