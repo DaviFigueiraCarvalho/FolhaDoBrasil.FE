@@ -24,11 +24,17 @@ export default function TopicColumns({
   onHover,
   onOpen,
   onSeeAll,
+  onSeeAllTopics,
+  wrap = false,
 }: {
   sections: TopicSection[]
   onHover: (post: NewsPost, hovering: boolean) => void
   onOpen: (post: NewsPost) => void
   onSeeAll: (topic: NewsTopic) => void
+  /** Botão do cabeçalho que abre a página com todos os tópicos. */
+  onSeeAllTopics?: () => void
+  /** Página "todos os tópicos": colunas quebram linha em vez de deslizar. */
+  wrap?: boolean
 }) {
   const { width: windowWidth } = useWindowDimensions()
   const [viewport, setViewport] = useState(windowWidth - spacing.l * 2)
@@ -40,13 +46,8 @@ export default function TopicColumns({
 
   const stride = COLUMN_WIDTH + GAP
   const columns = Math.max(1, Math.floor((viewport + GAP) / stride))
-  const slide = (direction: 1 | -1) => {
-    touchedAt.current = Date.now()
-    scroll.current?.scrollTo({ x: Math.max(0, offset.current + direction * stride), animated: true })
-  }
-
   // Avança uma coluna a cada ROTATE_MS e volta ao início no fim; pausa com o mouse em cima ou logo após o usuário mexer.
-  const canScroll = sections.length > columns
+  const canScroll = !wrap && sections.length > columns
   useEffect(() => {
     if (!canScroll) return
     const timer = setInterval(() => {
@@ -57,32 +58,8 @@ export default function TopicColumns({
     return () => clearInterval(timer)
   }, [canScroll, viewport, stride])
 
-  return (
-    <View style={styles.wrap} onPointerEnter={() => (hovering.current = true)} onPointerLeave={() => (hovering.current = false)}>
-      <View style={styles.header}>
-        <Text variant="title" color="textPrimary" accessibilityRole="header" style={styles.flex}>
-          Tópicos
-        </Text>
-        {canScroll && (
-          <>
-            <RoundButton label="Anteriores" glyph="‹" onPress={() => slide(-1)} />
-            <RoundButton label="Próximos" glyph="›" onPress={() => slide(1)} />
-          </>
-        )}
-      </View>
-      <ScrollView
-        ref={scroll}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        onLayout={(event) => setViewport(event.nativeEvent.layout.width)}
-        onScroll={(event) => (offset.current = event.nativeEvent.contentOffset.x)}
-        onScrollBeginDrag={() => (touchedAt.current = Date.now())}
-        onContentSizeChange={(width) => (contentWidth.current = width)}
-        scrollEventThrottle={16}
-        snapToInterval={stride}
-        decelerationRate="fast"
-        contentContainerStyle={styles.row}
-      >
+  const columnsJsx = (
+    <>
         {sections.map(({ topic, posts }) => (
           <View key={topic.id} style={[styles.column, { width: COLUMN_WIDTH }]}>
             <Text variant="heading" color="accent" accessibilityRole="header" numberOfLines={1}>
@@ -92,15 +69,50 @@ export default function TopicColumns({
               {posts.slice(0, MAX_POSTS).map((post) => (
                 <Item key={post.id} post={post} onHover={(hovering) => onHover(post, hovering)} onPress={() => onOpen(post)} />
               ))}
+              </View>
+              <Pressable onPress={() => onSeeAll(topic)} accessibilityRole="button" style={styles.seeAll}>
+                <Text variant="label" color="onAccent">
+                  Ver todas as notícias
+                </Text>
+              </Pressable>
             </View>
-            <Pressable onPress={() => onSeeAll(topic)} accessibilityRole="button" style={styles.seeAll}>
-              <Text variant="label" color="onAccent">
-                Ver todas as notícias
-              </Text>
-            </Pressable>
-          </View>
-        ))}
-      </ScrollView>
+          ))}
+      </>
+  )
+
+  return (
+    <View style={styles.wrap} onPointerEnter={() => (hovering.current = true)} onPointerLeave={() => (hovering.current = false)}>
+      <View style={styles.header}>
+        <Text variant="title" color="textPrimary" accessibilityRole="header" style={styles.flex}>
+          Tópicos
+        </Text>
+        {onSeeAllTopics && (
+          <Pressable onPress={onSeeAllTopics} accessibilityRole="button" style={styles.seeAllTopics}>
+            <Text variant="label" color="onAccent">
+              Ver todos os tópicos
+            </Text>
+          </Pressable>
+        )}
+      </View>
+      {wrap ? (
+        <View style={styles.wrapGrid}>{columnsJsx}</View>
+      ) : (
+        <ScrollView
+          ref={scroll}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          onLayout={(event) => setViewport(event.nativeEvent.layout.width)}
+          onScroll={(event) => (offset.current = event.nativeEvent.contentOffset.x)}
+          onScrollBeginDrag={() => (touchedAt.current = Date.now())}
+          onContentSizeChange={(width) => (contentWidth.current = width)}
+          scrollEventThrottle={16}
+          snapToInterval={stride}
+          decelerationRate="fast"
+          contentContainerStyle={styles.row}
+        >
+          {columnsJsx}
+        </ScrollView>
+      )}
     </View>
   )
 }
@@ -124,26 +136,17 @@ function Item({ post, onHover, onPress }: { post: NewsPost; onHover: (hovering: 
   )
 }
 
-function RoundButton({ label, glyph, onPress }: { label: string; glyph: string; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={styles.round}>
-      <Text variant="heading" color="textPrimary">
-        {glyph}
-      </Text>
-    </Pressable>
-  )
-}
-
 const styles = StyleSheet.create({
   wrap: { gap: spacing.s },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.s },
   flex: { flex: 1 },
-  round: { width: 36, height: 36, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   row: { gap: GAP, paddingVertical: spacing.xs },
   column: { padding: spacing.m, gap: spacing.s, borderRadius: radius.m, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceRaised },
   items: { flex: 1, gap: spacing.s },
   item: { flexDirection: 'row', alignItems: 'center', gap: spacing.s, padding: spacing.xs, borderRadius: radius.s },
   thumb: { width: 72, height: 72, borderRadius: radius.s },
   thumbEmpty: { backgroundColor: colors.surfaceHighlight },
+  seeAllTopics: { minHeight: 36, paddingHorizontal: spacing.m, borderRadius: radius.s, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
+  wrapGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
   seeAll: { minHeight: 40, borderRadius: radius.s, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
 })

@@ -97,7 +97,7 @@ function FullPost({ post }: { post: NewsPost }) {
 
 // GET /api/v2/news — público (50 mais recentes). Grid de miniaturas; no desktop, passar o mouse mostra
 // a notícia em tela cheia (só enquanto o mouse está no card) e clicar/tocar fixa em tela cheia.
-export default function NewsScreen({ topicId }: { topicId?: number }) {
+export default function NewsScreen({ topicId, allTopics = false }: { topicId?: number; allTopics?: boolean }) {
   const { data: posts, isLoading, isError, error, refetch } = useApiResource(
     (signal) => apiRequest<NewsPost[]>('/api/v2/news', { signal }),
     [],
@@ -170,7 +170,7 @@ export default function NewsScreen({ topicId }: { topicId?: number }) {
   const all = posts ?? []
   // Mais acessados primeiro (empate: o mais novo). Só na home; quem está no carrossel não repete abaixo.
   const top =
-    topicId === undefined
+    topicId === undefined && !allTopics
       ? [...all].sort((a, b) => b.viewCount - a.viewCount || b.publishedAtUtc.localeCompare(a.publishedAtUtc)).slice(0, TOP_COUNT)
       : []
   const inCarousel = new Set(top.map((post) => post.id))
@@ -179,6 +179,7 @@ export default function NewsScreen({ topicId }: { topicId?: number }) {
   const topicPosts = all.filter((post) => post.topicId === topicId)
   const sections = topics.map((topic) => ({ topic, posts: rest.filter((post) => post.topicId === topic.id) })).filter((section) => section.posts.length > 0)
   const known = new Set(topics.map((topic) => topic.id))
+  const allSections = topics.map((topic) => ({ topic, posts: all.filter((post) => post.topicId === topic.id) })).filter((section) => section.posts.length > 0)
   const others = rest.filter((post) => post.topicId === null || !known.has(post.topicId))
 
   function openPost(post: NewsPost) {
@@ -217,6 +218,14 @@ export default function NewsScreen({ topicId }: { topicId?: number }) {
               <View style={styles.grid}>{topicPosts.map((post) => card(post, gridWidth))}</View>
             )}
           </Section>
+        ) : allTopics ? (
+          <TopicColumns
+            wrap
+            sections={allSections}
+            onHover={(post, hovering) => handleHover(post.id, hovering)}
+            onOpen={openPost}
+            onSeeAll={(topic) => router.push({ pathname: '/topico', params: { id: String(topic.id) } })}
+          />
         ) : (
           <>
             {top.length > 0 && (
@@ -230,6 +239,7 @@ export default function NewsScreen({ topicId }: { topicId?: number }) {
                 onHover={(post, hovering) => handleHover(post.id, hovering)}
                 onOpen={openPost}
                 onSeeAll={(topic) => router.push({ pathname: '/topico', params: { id: String(topic.id) } })}
+                onSeeAllTopics={() => router.push('/topicos')}
               />
             )}
             {others.length > 0 && (
