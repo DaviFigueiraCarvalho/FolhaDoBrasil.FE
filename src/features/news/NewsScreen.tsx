@@ -8,6 +8,7 @@ import { apiRequest } from '../../api/httpClient'
 import { useApiResource } from '../../hooks/useApiResource'
 import { formatDateTime } from '../../utils/format'
 import { colors, radius, spacing } from '../../theme'
+import FeaturedCarousel from './FeaturedCarousel'
 import { NewsBody, PostImage, coverUrl, excerpt, type NewsPost } from './NewsBody'
 
 const HOVER_DELAY_MS = 250
@@ -147,6 +148,7 @@ export default function NewsScreen() {
     }
   }, [])
 
+  const featured = posts?.filter((post) => post.isFeatured) ?? []
   const hoveredPost = pinned ? null : (posts?.find((post) => post.id === hoveredId) ?? null)
 
   return (
@@ -168,6 +170,7 @@ export default function NewsScreen() {
         emptyDescription="Nada publicado por enquanto."
         loadingLabel="Carregando notícias…"
       >
+        {featured.length > 0 && <FeaturedCarousel posts={featured} onOpen={(post) => { setHoveredId(null); setPinned(post) }} />}
         <View style={styles.grid}>
           {posts?.map((post) => (
             <NewsCard
