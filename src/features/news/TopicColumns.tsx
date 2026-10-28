@@ -5,21 +5,18 @@ import { Text } from '../../components'
 import { colors, radius, spacing } from '../../theme'
 import { coverUrl, type NewsPost, type NewsTopic } from './NewsBody'
 
-const MIN_COLUMN = 300 // largura-alvo de uma coluna; define quantas inteiras cabem
-const MIN_COLUMNS = 2
-const PEEK = 0.4 // fração da próxima coluna que aparece cortada à direita
+const COLUMN_WIDTH = 280 // largura rígida: celular mostra 1 coluna (+ a próxima espiando); telas maiores, mais colunas
 const GAP = spacing.m
 const MAX_POSTS = 5
-const STACKED_BELOW = 220 // colunas mais estreitas (celular) põem a miniatura em cima do título
 
 export interface TopicSection {
   topic: NewsTopic
   posts: NewsPost[]
 }
 
-// Carrossel horizontal de colunas: cada tópico é uma coluna com até 5 notícias empilhadas (1 x 5) e o
-// botão "Ver todas as notícias". Alinhado à esquerda: no mínimo 2 colunas inteiras e uma cortada à
-// direita; quanto maior a tela, mais colunas.
+// Carrossel horizontal de colunas: cada tópico é uma coluna de largura fixa com até 5 notícias empilhadas
+// (1 x 5) e o botão "Ver todas as notícias". Alinhado à esquerda; a largura da tela decide quantas colunas
+// aparecem (em telas pequenas, 1) e a seguinte fica cortada à direita.
 export default function TopicColumns({
   sections,
   onHover,
@@ -36,9 +33,8 @@ export default function TopicColumns({
   const scroll = useRef<ScrollView>(null)
   const offset = useRef(0)
 
-  const columns = Math.max(MIN_COLUMNS, Math.floor(viewport / MIN_COLUMN))
-  const columnWidth = Math.floor((viewport - columns * GAP) / (columns + PEEK))
-  const stride = columnWidth + GAP
+  const stride = COLUMN_WIDTH + GAP
+  const columns = Math.max(1, Math.floor((viewport + GAP) / stride))
   const slide = (direction: 1 | -1) => scroll.current?.scrollTo({ x: Math.max(0, offset.current + direction * stride), animated: true })
 
   return (
@@ -66,13 +62,13 @@ export default function TopicColumns({
         contentContainerStyle={styles.row}
       >
         {sections.map(({ topic, posts }) => (
-          <View key={topic.id} style={[styles.column, { width: columnWidth }]}>
+          <View key={topic.id} style={[styles.column, { width: COLUMN_WIDTH }]}>
             <Text variant="heading" color="accent" accessibilityRole="header" numberOfLines={1}>
               {topic.name}
             </Text>
             <View style={styles.items}>
               {posts.slice(0, MAX_POSTS).map((post) => (
-                <Item key={post.id} post={post} stacked={columnWidth < STACKED_BELOW} onHover={(hovering) => onHover(post, hovering)} onPress={() => onOpen(post)} />
+                <Item key={post.id} post={post} onHover={(hovering) => onHover(post, hovering)} onPress={() => onOpen(post)} />
               ))}
             </View>
             <Pressable onPress={() => onSeeAll(topic)} accessibilityRole="button" style={styles.seeAll}>
@@ -87,7 +83,7 @@ export default function TopicColumns({
   )
 }
 
-function Item({ post, stacked, onHover, onPress }: { post: NewsPost; stacked: boolean; onHover: (hovering: boolean) => void; onPress: () => void }) {
+function Item({ post, onHover, onPress }: { post: NewsPost; onHover: (hovering: boolean) => void; onPress: () => void }) {
   const cover = coverUrl(post)
   return (
     <Pressable
@@ -96,10 +92,10 @@ function Item({ post, stacked, onHover, onPress }: { post: NewsPost; stacked: bo
       onHoverOut={() => onHover(false)}
       accessibilityRole="button"
       accessibilityLabel={post.title}
-      style={[styles.item, stacked && styles.itemStacked]}
+      style={styles.item}
     >
-      {cover ? <Image source={{ uri: cover }} style={[styles.thumb, stacked && styles.thumbStacked]} contentFit="cover" /> : <View style={[styles.thumb, stacked && styles.thumbStacked, styles.thumbEmpty]} />}
-      <Text variant="bodyStrong" color="textPrimary" numberOfLines={3} style={stacked ? undefined : styles.flex}>
+      {cover ? <Image source={{ uri: cover }} style={styles.thumb} contentFit="cover" /> : <View style={[styles.thumb, styles.thumbEmpty]} />}
+      <Text variant="bodyStrong" color="textPrimary" numberOfLines={3} style={styles.flex}>
         {post.title}
       </Text>
     </Pressable>
@@ -125,8 +121,6 @@ const styles = StyleSheet.create({
   column: { padding: spacing.m, gap: spacing.s, borderRadius: radius.m, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceRaised },
   items: { flex: 1, gap: spacing.s },
   item: { flexDirection: 'row', alignItems: 'center', gap: spacing.s, padding: spacing.xs, borderRadius: radius.s },
-  itemStacked: { flexDirection: 'column', alignItems: 'stretch' },
-  thumbStacked: { width: '100%', height: undefined, aspectRatio: 4 / 3 },
   thumb: { width: 72, height: 72, borderRadius: radius.s },
   thumbEmpty: { backgroundColor: colors.surfaceHighlight },
   seeAll: { minHeight: 40, borderRadius: radius.s, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
