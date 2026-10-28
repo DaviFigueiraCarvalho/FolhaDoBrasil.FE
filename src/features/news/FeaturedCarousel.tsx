@@ -1,65 +1,124 @@
 import { useEffect, useState } from 'react'
-import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native'
+import { Animated, Easing, Platform, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native'
 import { Image } from 'expo-image'
 import { Text } from '../../components'
 import { colors, radius, spacing } from '../../theme'
-import { coverUrl, excerpt, type NewsPost } from './NewsBody'
+import { coverUrl, type NewsPost } from './NewsBody'
 
 const ROTATE_MS = 6000
+const SLIDE_MS = 500
+const PHONE_WIDTH = 420 // a capa nunca passa disso: em tela grande sobra espaço para as vizinhas
+const GAP = spacing.m
+const ARROWS_BELOW_SIDE_SPACE = 60 // sem espaço lateral para ver as vizinhas, usa setas
 
-// Carrossel de destaques (isFeatured): uma notícia por vez, troca sozinho e pausa com o mouse em cima.
+const mod = (n: number, m: number) => ((n % m) + m) % m
+
+// Carrossel de destaques: a matéria atual tem tamanho fixo de celular; as vizinhas aparecem
+// escurecidas nas laterais conforme a largura disponível (quanto mais tela, mais delas) e deslizam
+// em loop. `step` é um contador sem limite (key do slide); `pos` anima até ele.
 export default function FeaturedCarousel({ posts, onOpen }: { posts: NewsPost[]; onOpen: (post: NewsPost) => void }) {
-  const { width } = useWindowDimensions()
-  const [index, setIndex] = useState(0)
+  const { width: windowWidth } = useWindowDimensions()
+  const [containerWidth, setContainerWidth] = useState(windowWidth)
+  const [step, setStep] = useState(0)
   const [paused, setPaused] = useState(false)
+  const [pos] = useState(() => new Animated.Value(0))
   const count = posts.length
-  const current = posts[Math.min(index, count - 1)]
-  const wide = width >= 900
 
-  const go = (step: number) => setIndex((i) => (i + step + count) % count)
+  const slideWidth = Math.min(containerWidth, PHONE_WIDTH)
+  const slideHeight = Math.round((slideWidth * 5) / 4)
+  const stride = slideWidth + GAP
+  const sideSpace = (containerWidth - slideWidth) / 2
+  const reach = count < 2 ? 0 : Math.min(Math.ceil(sideSpace / stride) + 1, count >= 3 ? Math.floor(count / 2) : 1)
+
+  useEffect(() => {
+    Animated.timing(pos, { toValue: step, duration: SLIDE_MS, easing: Easing.out(Easing.cubic), useNativeDriver: Platform.OS !== 'web' }).start()
+  }, [step, pos])
 
   useEffect(() => {
     if (count < 2 || paused) return
-    const timer = setInterval(() => setIndex((i) => (i + 1) % count), ROTATE_MS)
+    const timer = setInterval(() => setStep((s) => s + 1), ROTATE_MS)
     return () => clearInterval(timer)
   }, [count, paused])
 
-  if (!current) return null
-  const cover = coverUrl(current)
-
-  return (
-    <View style={styles.wrap} onPointerEnter={() => setPaused(true)} onPointerLeave={() => setPaused(false)}>
-      <Pressable onPress={() => onOpen(current)} accessibilityRole="button" accessibilityLabel={`Destaque: ${current.title}`}>
-        <View style={[styles.hero, { aspectRatio: wide ? 16 / 6 : 4 / 3 }]}>
+  const active = mod(step, count)
+  const slides = []
+  for (let k = step - reach; k <= step + reach; k++) {
+    const post = posts[mod(k, count)]
+    const cover = coverUrl(post)
+    const left = (containerWidth - slideWidth) / 2
+    slides.push(
+      <Animated.View
+        key={k}
+        style={[
+          styles.slide,
+          {
+            width: slideWidth,
+            height: slideHeight,
+            left,
+            transform: [{ translateX: pos.interpolate({ inputRange: [0, 1], outputRange: [k * stride, (k - 1) * stride] }) }],
+          },
+        ]}
+      >
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={() => (k === step ? onOpen(post) : setStep(k))}
+          accessibilityRole="button"
+          accessibilityLabel={k === step ? `Destaque: ${post.title}` : `Ver destaque: ${post.title}`}
+        >
           {cover && <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" />}
           <View style={styles.caption}>
             <Text variant="label" color="accent">
               DESTAQUE
             </Text>
-            <Text variant={wide ? 'display' : 'title'} color="white" numberOfLines={3}>
-              {current.title}
+            <Text variant="title" color="white" numberOfLines={3}>
+              {post.title}
             </Text>
-            {wide && (
-              <Text variant="body" color="textSecondary" numberOfLines={2}>
-                {excerpt(current.body)}
-              </Text>
-            )}
           </View>
-        </View>
-      </Pressable>
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              StyleSheet.absoluteFill,
+              styles.dim,
+              { opacity: pos.interpolate({ inputRange: [k - 1, k, k + 1], outputRange: [0.65, 0, 0.65], extrapolate: 'clamp' }) },
+            ]}
+          />
+        </Pressable>
+      </Animated.View>,
+    )
+  }
 
+  // Menor deslocamento circular até o destaque `target` (bolinhas).
+  const goTo = (target: number) => {
+    let delta = mod(target - active, count)
+    if (delta > count / 2) delta -= count
+    setStep((s) => s + delta)
+  }
+  const showArrows = count > 1 && sideSpace < ARROWS_BELOW_SIDE_SPACE
+
+  return (
+    <View
+      style={styles.wrap}
+      onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}
+      onPointerEnter={() => setPaused(true)}
+      onPointerLeave={() => setPaused(false)}
+    >
+      <View style={[styles.viewport, { height: slideHeight }]}>
+        {slides}
+        {showArrows && (
+          <>
+            <Arrow label="Anterior" glyph="‹" side="left" onPress={() => setStep((s) => s - 1)} />
+            <Arrow label="Próxima" glyph="›" side="right" onPress={() => setStep((s) => s + 1)} />
+          </>
+        )}
+      </View>
       {count > 1 && (
-        <>
-          <Arrow label="Anterior" glyph="‹" side="left" onPress={() => go(-1)} />
-          <Arrow label="Próxima" glyph="›" side="right" onPress={() => go(1)} />
-          <View style={styles.dots}>
-            {posts.map((post, i) => (
-              <Pressable key={post.id} onPress={() => setIndex(i)} accessibilityRole="button" accessibilityLabel={`Destaque ${i + 1} de ${count}`} hitSlop={8}>
-                <View style={[styles.dot, i === index && styles.dotActive]} />
-              </Pressable>
-            ))}
-          </View>
-        </>
+        <View style={styles.dots}>
+          {posts.map((post, i) => (
+            <Pressable key={post.id} onPress={() => goTo(i)} accessibilityRole="button" accessibilityLabel={`Destaque ${i + 1} de ${count}`} hitSlop={8}>
+              <View style={[styles.dot, i === active && styles.dotActive]} />
+            </Pressable>
+          ))}
+        </View>
       )}
     </View>
   )
@@ -76,13 +135,15 @@ function Arrow({ label, glyph, side, onPress }: { label: string; glyph: string; 
 }
 
 const styles = StyleSheet.create({
-  wrap: { width: '100%', maxWidth: 1200, alignSelf: 'center' },
-  hero: { width: '100%', maxHeight: 460, borderRadius: radius.m, overflow: 'hidden', backgroundColor: colors.surfaceHighlight, justifyContent: 'flex-end' },
-  caption: { padding: spacing.l, paddingBottom: spacing.xl + spacing.l, gap: spacing.xs, backgroundColor: 'rgba(8, 24, 64, 0.72)' },
+  wrap: { width: '100%', maxWidth: 1600, alignSelf: 'center', gap: spacing.s },
+  viewport: { width: '100%', overflow: 'hidden' },
+  slide: { position: 'absolute', top: 0, borderRadius: radius.m, overflow: 'hidden', backgroundColor: colors.surfaceHighlight, justifyContent: 'flex-end' },
+  caption: { padding: spacing.l, gap: spacing.xs, backgroundColor: 'rgba(8, 24, 64, 0.72)' },
+  dim: { backgroundColor: '#061436' },
   arrow: { position: 'absolute', top: '50%', marginTop: -22, width: 44, height: 44, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(8, 24, 64, 0.6)' },
   left: { left: spacing.s },
   right: { right: spacing.s },
-  dots: { position: 'absolute', bottom: spacing.m, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: spacing.s },
-  dot: { width: 10, height: 10, borderRadius: radius.full, backgroundColor: 'rgba(255,255,255,0.45)' },
+  dots: { flexDirection: 'row', justifyContent: 'center', gap: spacing.s },
+  dot: { width: 10, height: 10, borderRadius: radius.full, backgroundColor: colors.border },
   dotActive: { backgroundColor: colors.accent },
 })
