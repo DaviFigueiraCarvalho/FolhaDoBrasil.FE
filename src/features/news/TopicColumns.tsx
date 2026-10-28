@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native'
 import { Image } from 'expo-image'
 import { Text } from '../../components'
@@ -8,6 +8,8 @@ import { coverUrl, type NewsPost, type NewsTopic } from './NewsBody'
 const COLUMN_WIDTH = 280 // largura rígida: celular mostra 1 coluna (+ a próxima espiando); telas maiores, mais colunas
 const GAP = spacing.m
 const MAX_POSTS = 5
+const ROTATE_MS = 6000
+const IDLE_AFTER_TOUCH_MS = 10000 // depois de mexer na fileira, o avanço automático espera
 
 export interface TopicSection {
   topic: NewsTopic
@@ -32,18 +34,36 @@ export default function TopicColumns({
   const [viewport, setViewport] = useState(windowWidth - spacing.l * 2)
   const scroll = useRef<ScrollView>(null)
   const offset = useRef(0)
+  const contentWidth = useRef(0)
+  const hovering = useRef(false)
+  const touchedAt = useRef(0)
 
   const stride = COLUMN_WIDTH + GAP
   const columns = Math.max(1, Math.floor((viewport + GAP) / stride))
-  const slide = (direction: 1 | -1) => scroll.current?.scrollTo({ x: Math.max(0, offset.current + direction * stride), animated: true })
+  const slide = (direction: 1 | -1) => {
+    touchedAt.current = Date.now()
+    scroll.current?.scrollTo({ x: Math.max(0, offset.current + direction * stride), animated: true })
+  }
+
+  // Avança uma coluna a cada ROTATE_MS e volta ao início no fim; pausa com o mouse em cima ou logo após o usuário mexer.
+  const canScroll = sections.length > columns
+  useEffect(() => {
+    if (!canScroll) return
+    const timer = setInterval(() => {
+      if (hovering.current || Date.now() - touchedAt.current < IDLE_AFTER_TOUCH_MS) return
+      const atEnd = offset.current + viewport >= contentWidth.current - 2
+      scroll.current?.scrollTo({ x: atEnd ? 0 : offset.current + stride, animated: true })
+    }, ROTATE_MS)
+    return () => clearInterval(timer)
+  }, [canScroll, viewport, stride])
 
   return (
-    <View style={styles.wrap}>
+    <View style={styles.wrap} onPointerEnter={() => (hovering.current = true)} onPointerLeave={() => (hovering.current = false)}>
       <View style={styles.header}>
         <Text variant="title" color="textPrimary" accessibilityRole="header" style={styles.flex}>
           Tópicos
         </Text>
-        {sections.length > columns && (
+        {canScroll && (
           <>
             <RoundButton label="Anteriores" glyph="‹" onPress={() => slide(-1)} />
             <RoundButton label="Próximos" glyph="›" onPress={() => slide(1)} />
@@ -56,6 +76,8 @@ export default function TopicColumns({
         showsHorizontalScrollIndicator={false}
         onLayout={(event) => setViewport(event.nativeEvent.layout.width)}
         onScroll={(event) => (offset.current = event.nativeEvent.contentOffset.x)}
+        onScrollBeginDrag={() => (touchedAt.current = Date.now())}
+        onContentSizeChange={(width) => (contentWidth.current = width)}
         scrollEventThrottle={16}
         snapToInterval={stride}
         decelerationRate="fast"

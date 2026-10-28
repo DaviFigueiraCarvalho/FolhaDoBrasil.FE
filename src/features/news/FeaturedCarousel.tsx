@@ -7,7 +7,8 @@ import { coverUrl, type NewsPost } from './NewsBody'
 
 const ROTATE_MS = 6000
 const SLIDE_MS = 500
-const PHONE_WIDTH = 420 // a capa nunca passa disso: em tela grande sobra espaço para as vizinhas
+const PHONE_WIDTH = 420 // piso: em tela pequena/média a capa tem tamanho de celular
+const MAX_SLIDE_HEIGHT = 540
 const GAP = spacing.m
 const ARROWS_BELOW_SIDE_SPACE = 60 // sem espaço lateral para ver as vizinhas, usa setas
 
@@ -24,8 +25,9 @@ export default function FeaturedCarousel({ posts, onOpen }: { posts: NewsPost[];
   const [pos] = useState(() => new Animated.Value(0))
   const count = posts.length
 
-  const slideWidth = Math.min(containerWidth, PHONE_WIDTH)
-  const slideHeight = Math.round((slideWidth * 5) / 4)
+  // Em tela grande a capa cresce até ocupar metade da largura: cada vizinha aparece com ~50% de si.
+  const slideWidth = Math.min(containerWidth, Math.max(PHONE_WIDTH, Math.round((containerWidth - 2 * GAP) / 2)))
+  const slideHeight = Math.min(Math.round((slideWidth * 5) / 4), MAX_SLIDE_HEIGHT)
   const stride = slideWidth + GAP
   const sideSpace = (containerWidth - slideWidth) / 2
   const reach = count < 2 ? 0 : Math.min(Math.ceil(sideSpace / stride) + 1, count >= 3 ? Math.floor(count / 2) : 1)
