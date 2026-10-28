@@ -9,17 +9,15 @@ const ROTATE_MS = 6000
 const IDLE_AFTER_TOUCH_MS = 10000
 
 // Linha horizontal de cards que passa sozinha (pausa com o mouse em cima ou logo após o usuário mexer),
-// com título, uma linha de destaque e um botão à direita. Usada em "Últimas notícias" e em cada tópico.
+// com título, uma linha de destaque e um botão à direita. Usada em "Últimas notícias".
 export default function PostRow({
   title,
-  titleVariant = 'title',
   posts,
   renderCard,
   actionLabel,
   onAction,
 }: {
   title: string
-  titleVariant?: 'title' | 'heading'
   posts: NewsPost[]
   renderCard: (post: NewsPost, width: number) => ReactNode
   actionLabel: string
@@ -47,7 +45,7 @@ export default function PostRow({
   return (
     <View style={styles.wrap} onPointerEnter={() => (hovering.current = true)} onPointerLeave={() => (hovering.current = false)}>
       <View style={styles.header}>
-        <Text variant={titleVariant} color={titleVariant === 'title' ? 'textPrimary' : 'accent'} accessibilityRole="header" style={styles.flex}>
+        <Text variant="title" color="textPrimary" accessibilityRole="header" style={styles.flex}>
           {title}
         </Text>
         <Pressable onPress={onAction} accessibilityRole="button" style={styles.seeAll}>

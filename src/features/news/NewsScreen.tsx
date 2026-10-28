@@ -10,7 +10,7 @@ import { formatDateTime } from '../../utils/format'
 import { colors, radius, spacing } from '../../theme'
 import FeaturedCarousel from './FeaturedCarousel'
 import Masthead from './Masthead'
-import TopicRows from './TopicRows'
+import TopicColumns from './TopicColumns'
 import TopicSearch from './TopicSearch'
 import PostRow from './PostRow'
 import BackButton from './BackButton'
@@ -262,9 +262,11 @@ export default function NewsScreen({ topicId, allTopics = false, latest = false 
             matches={matches}
             onPick={(topic) => router.push({ pathname: '/topico', params: { id: String(topic.id) } })}
           />
-          <TopicRows
+          <TopicColumns
+            wrap
             sections={visibleSections}
-            renderCard={card}
+            onHover={(post, hovering) => handleHover(post.id, hovering)}
+            onOpen={openPost}
             onSeeAll={(topic) => router.push({ pathname: '/topico', params: { id: String(topic.id) } })}
           />
           </>
@@ -279,9 +281,10 @@ export default function NewsScreen({ topicId, allTopics = false, latest = false 
               <PostRow title="Últimas notícias" posts={latestRow} renderCard={card} actionLabel="Ver todas as últimas notícias" onAction={() => router.push('/ultimas')} />
             )}
             {sections.length > 0 && (
-              <TopicRows
+              <TopicColumns
                 sections={sections}
-                renderCard={card}
+                onHover={(post, hovering) => handleHover(post.id, hovering)}
+                onOpen={openPost}
                 onSeeAll={(topic) => router.push({ pathname: '/topico', params: { id: String(topic.id) } })}
                 onSeeAllTopics={() => router.push('/topicos')}
               />
