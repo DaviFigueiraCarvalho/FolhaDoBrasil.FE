@@ -9,6 +9,8 @@ const ROTATE_MS = 6000
 const SLIDE_MS = 500
 const PHONE_WIDTH = 420 // piso: em tela pequena/média a capa tem tamanho de celular
 const MAX_SLIDE_HEIGHT = 540
+const MIN_SLIDE_HEIGHT = 220
+const BELOW_FOLD_RESERVE = 520 // cabeçalho + título + pontos + "Últimas notícias" com os cards: tudo visível sem rolar
 const GAP = spacing.m
 const ARROWS_BELOW_SIDE_SPACE = 60 // sem espaço lateral para ver as vizinhas, usa setas
 
@@ -18,7 +20,7 @@ const mod = (n: number, m: number) => ((n % m) + m) % m
 // escurecidas nas laterais conforme a largura disponível (quanto mais tela, mais delas) e deslizam
 // em loop. `step` é um contador sem limite (key do slide); `pos` anima até ele.
 export default function FeaturedCarousel({ posts, onOpen }: { posts: NewsPost[]; onOpen: (post: NewsPost) => void }) {
-  const { width: windowWidth } = useWindowDimensions()
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions()
   const [containerWidth, setContainerWidth] = useState(windowWidth)
   const [step, setStep] = useState(0)
   const [paused, setPaused] = useState(false)
@@ -27,7 +29,8 @@ export default function FeaturedCarousel({ posts, onOpen }: { posts: NewsPost[];
 
   // Em tela grande a capa cresce até ocupar metade da largura: cada vizinha aparece com ~50% de si.
   const slideWidth = Math.min(containerWidth, Math.max(PHONE_WIDTH, Math.round((containerWidth - 2 * GAP) / 2)))
-  const slideHeight = Math.min(Math.round((slideWidth * 5) / 4), MAX_SLIDE_HEIGHT)
+  // A altura também respeita a janela: o carrossel não empurra "Últimas notícias" para fora da primeira tela.
+  const slideHeight = Math.min(Math.round((slideWidth * 5) / 4), MAX_SLIDE_HEIGHT, Math.max(MIN_SLIDE_HEIGHT, windowHeight - BELOW_FOLD_RESERVE))
   const stride = slideWidth + GAP
   const sideSpace = (containerWidth - slideWidth) / 2
   const reach = count < 2 ? 0 : Math.min(Math.ceil(sideSpace / stride) + 1, count >= 3 ? Math.floor(count / 2) : 1)
