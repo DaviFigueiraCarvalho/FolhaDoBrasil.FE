@@ -1,19 +1,22 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type DimensionValue, type ViewStyle } from 'react-native'
 import { Image } from 'expo-image'
 import WebPortal from '../../platform/WebPortal'
 import { AsyncState, Screen, Surface, Text } from '../../components'
 import type { DisplayableError } from '../../components/ErrorState'
-import { apiRequest } from '../../api/httpClient'
-import { useApiResource } from '../../hooks/useApiResource'
+import { usePagedApiResource } from '../../hooks/usePagedApiResource'
 import { formatDateTime } from '../../utils/format'
 import { colors, radius, spacing } from '../../theme'
 import FeaturedCarousel from './FeaturedCarousel'
 import Masthead from './Masthead'
+import MarketTicker from '../market/MarketTicker'
 import TopicColumns from './TopicColumns'
 import TopicSearch from './TopicSearch'
 import PostRow from './PostRow'
 import BackButton from './BackButton'
+import ZoomPresence from './ZoomPresence'
+import Reader from './Reader'
+import AdSlot from '../ads/AdSlot'
 import { inPeriod, searchTopics, type Period } from './search'
 import { useRouter } from 'expo-router'
 import { registerView } from './registerView'
@@ -28,6 +31,7 @@ const PERIODS: { key: Period; label: string }[] = [
   { key: 'week', label: 'Semana' },
   { key: 'year', label: 'Ano' },
 ]
+const ZOOM_OUT_MS = 200 // um pouco mais que a animação de ZoomPresence, para o Modal fechar depois dela
 const SCROLL_IDLE_MS = 150 // sem rolar por isso = "parou de rolar"
 
 // Colunas por largura: celular 2–3, desktop 4–5. A prévia do texto só cabe do desktop em diante.
@@ -106,21 +110,47 @@ function FullPost({ post }: { post: NewsPost }) {
   )
 }
 
-// GET /api/v2/news — público (50 mais recentes). Grid de miniaturas; no desktop, passar o mouse mostra
+// GET /api/v2/news — público, paginado (page/pageSize): a 1ª página abre a tela e as demais chegam em segundo plano. Grid de miniaturas; no desktop, passar o mouse mostra
 // a notícia em tela cheia (só enquanto o mouse está no card) e clicar/tocar fixa em tela cheia.
-export default function NewsScreen({ topicId, allTopics = false, latest = false }: { topicId?: number; allTopics?: boolean; latest?: boolean }) {
-  const { data: posts, isLoading, isError, error, refetch } = useApiResource(
-    (signal) => apiRequest<NewsPost[]>('/api/v2/news', { signal }),
-    [],
-  )
-  const { data: topicList } = useApiResource((signal) => apiRequest<NewsTopic[]>('/api/v2/news/topics', { signal }), [])
+export default function NewsScreen({ topicId, allTopics = false, latest = false, postId }: { topicId?: number; allTopics?: boolean; latest?: boolean; postId?: number }) {
+  const { data: posts, isLoading, isError, error, refetch } = usePagedApiResource<NewsPost>('/api/v2/news')
+  const { data: topicList } = usePagedApiResource<NewsTopic>('/api/v2/news/topics')
   const router = useRouter()
   const { columns, showExcerpt } = useGrid()
   const [hoveredId, setHoveredId] = useState<number | null>(null)
-  const [pinned, setPinned] = useState<NewsPost | null>(null)
+  const [clicked, setPinned] = useState<NewsPost | null>(null)
+  // Link compartilhado (/noticia?id=…): abre essa matéria assim que a lista chega, até fechar o leitor.
+  const [linkClosed, setLinkClosed] = useState(false)
+  const linked = postId !== undefined && !linkClosed ? (posts?.find((post) => post.id === postId) ?? null) : null
+  const pinned = clicked ?? linked
+  const [modalOpen, setModalOpen] = useState(false)
+  const readerScroll = useRef<ScrollView>(null)
+  const [showTop, setShowTop] = useState(false)
+  // Último ponto do ponteiro (web): é de onde a notícia "nasce" e para onde volta no zoom.
+  const pointer = useRef<{ x: number; y: number } | null>(null)
+  const [origin, setOrigin] = useState<{ x: number; y: number } | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => () => void (timer.current && clearTimeout(timer.current)), [])
+
+  // Visita por link compartilhado também conta como acesso (ranking "mais relevantes").
+  const linkedId = linked?.id
+  useEffect(() => {
+    if (linkedId !== undefined) registerView(linkedId)
+  }, [linkedId])
+
+  // Fecha um instante depois do toque/clique: se o modal some no mouseup, o navegador entrega o `click`
+  // ao elemento que estava embaixo (ex.: um card ou o botão do cabeçalho).
+  const closePinned = useCallback(() => {
+    setTimeout(() => setPinned(null), 80)
+    setTimeout(() => {
+      setModalOpen(false)
+      if (linked) {
+        setLinkClosed(true)
+        router.replace('/')
+      }
+    }, 80 + ZOOM_OUT_MS)
+  }, [linked, router])
 
   // Web: o Modal do RN não captura Esc de forma confiável; fecha a notícia fixada explicitamente.
   useEffect(() => {
@@ -128,13 +158,7 @@ export default function NewsScreen({ topicId, allTopics = false, latest = false 
     const onKey = (event: KeyboardEvent) => event.key === 'Escape' && closePinned()
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [pinned])
-
-  // Fecha um instante depois do toque/clique: se o modal some no mouseup, o navegador entrega o `click`
-  // ao elemento que estava embaixo (ex.: um card ou o botão do cabeçalho).
-  function closePinned() {
-    setTimeout(() => setPinned(null), 80)
-  }
+  }, [pinned, closePinned])
 
   // Web: enquanto rola (roda do mouse ou barra), o hover fica desligado; ao parar, volta no card que
   // estiver sob o mouse. `overId` guarda esse card mesmo durante a rolagem.
@@ -146,7 +170,10 @@ export default function NewsScreen({ topicId, allTopics = false, latest = false 
     if (timer.current) clearTimeout(timer.current)
     if (hovering) {
       overId.current = id
-      if (!scrolling.current) timer.current = setTimeout(() => setHoveredId(id), HOVER_DELAY_MS)
+      if (!scrolling.current) timer.current = setTimeout(() => {
+        setOrigin(pointer.current)
+        setHoveredId(id)
+      }, HOVER_DELAY_MS)
     } else {
       if (overId.current === id) overId.current = null
       setHoveredId((current) => (current === id ? null : current))
@@ -168,9 +195,14 @@ export default function NewsScreen({ topicId, allTopics = false, latest = false 
       }, SCROLL_IDLE_MS)
     }
     // `scroll` não borbulha, então a captura pega qualquer contêiner rolável (inclusive o do Screen).
+    const onPointer = (event: PointerEvent) => void (pointer.current = { x: event.clientX, y: event.clientY })
+    window.addEventListener('pointermove', onPointer, { passive: true })
+    window.addEventListener('pointerdown', onPointer, { passive: true })
     window.addEventListener('wheel', onScroll, { passive: true })
     window.addEventListener('scroll', onScroll, { capture: true, passive: true })
     return () => {
+      window.removeEventListener('pointermove', onPointer)
+      window.removeEventListener('pointerdown', onPointer)
       window.removeEventListener('wheel', onScroll)
       window.removeEventListener('scroll', onScroll, { capture: true })
       if (scrollIdle.current) clearTimeout(scrollIdle.current)
@@ -200,7 +232,13 @@ export default function NewsScreen({ topicId, allTopics = false, latest = false 
 
   function openPost(post: NewsPost) {
     setHoveredId(null)
+    showPost(post)
+  }
+
+  function showPost(post: NewsPost) {
+    setOrigin(pointer.current)
     setPinned(post)
+    setModalOpen(true)
     registerView(post.id)
   }
 
@@ -212,6 +250,7 @@ export default function NewsScreen({ topicId, allTopics = false, latest = false 
 
   return (
     <Screen scroll edges={['left', 'right']}>
+      <MarketTicker />
       <Masthead />
       {(topicId !== undefined || allTopics || latest) && <BackButton />}
 
@@ -280,6 +319,7 @@ export default function NewsScreen({ topicId, allTopics = false, latest = false 
             {latestRow.length > 0 && (
               <PostRow title="Últimas notícias" posts={latestRow} renderCard={card} actionLabel="Ver todas as últimas notícias" onAction={() => router.push('/ultimas')} />
             )}
+            <AdSlot name="homeMid" />
             {sections.length > 0 && (
               <TopicColumns
                 sections={sections}
@@ -293,27 +333,42 @@ export default function NewsScreen({ topicId, allTopics = false, latest = false 
         )}
       </AsyncState>
 
+      <AdSlot name="footer" />
+
       {/* Prévia por hover (web): tela cheia, mas sem capturar o mouse — assim o hover continua no card
           e a prévia some assim que o mouse sai dele. */}
       {/* Portal no <body>: o `fixed` precisa escapar dos contêineres do layout para cobrir a tela toda. */}
-      {hoveredPost && (
-        <WebPortal>
-          <View style={[styles.hoverOverlay, WEB_FIXED]} pointerEvents="none">
-            <ScrollView scrollEnabled={false} contentContainerStyle={styles.fullScroll}>
-              <FullPost post={hoveredPost} />
-            </ScrollView>
-          </View>
-        </WebPortal>
-      )}
+      <WebPortal>
+        <ZoomPresence item={hoveredPost} origin={origin} style={[styles.hoverOverlay, WEB_FIXED]}>
+          {(post) => (
+            <View style={styles.flex} pointerEvents="none">
+              <ScrollView scrollEnabled={false} contentContainerStyle={styles.fullScroll}>
+                <FullPost post={post} />
+              </ScrollView>
+            </View>
+          )}
+        </ZoomPresence>
+      </WebPortal>
 
       {/* Fixada: tela cheia rolável; fecha no ×, tocando fora do painel ou com Esc/voltar. */}
-      <Modal visible={pinned !== null} transparent animationType="fade" onRequestClose={closePinned} statusBarTranslucent>
-        <Pressable style={styles.pinnedBackdrop} onPress={closePinned} accessibilityRole="none">
-          <ScrollView contentContainerStyle={styles.fullScroll} onStartShouldSetResponder={() => true}>
-            <Pressable onPress={(event) => event.stopPropagation()} accessibilityRole="none" style={styles.fullWrap}>
-              {pinned && <FullPost post={pinned} />}
+      <Modal visible={modalOpen || linked !== null} transparent animationType="none" onRequestClose={closePinned} statusBarTranslucent>
+        <Pressable style={styles.flex} onPress={closePinned} accessibilityRole="none">
+          <ZoomPresence item={pinned} origin={origin} style={styles.pinnedBackdrop}>
+            {(post) => (
+              <ScrollView ref={readerScroll} contentContainerStyle={styles.readerScroll} onStartShouldSetResponder={() => true} scrollEventThrottle={100} onScroll={(event) => setShowTop(event.nativeEvent.contentOffset.y > 600)}>
+                <Pressable onPress={(event) => event.stopPropagation()} accessibilityRole="none" style={styles.fullWrap}>
+                  <Reader post={post} onBack={closePinned} />
+                </Pressable>
+              </ScrollView>
+            )}
+          </ZoomPresence>
+          {showTop && (
+            <Pressable onPress={() => readerScroll.current?.scrollTo({ y: 0, animated: true })} accessibilityRole="button" accessibilityLabel="Voltar ao topo" style={styles.toTop}>
+              <Text variant="title" color="onAccent">
+                ↑
+              </Text>
             </Pressable>
-          </ScrollView>
+          )}
           <Pressable onPress={closePinned} accessibilityRole="button" accessibilityLabel="Fechar" hitSlop={8} style={styles.close}>
             <Text variant="title" color="textPrimary">
               ×
@@ -329,6 +384,7 @@ export default function NewsScreen({ topicId, allTopics = false, latest = false 
 const WEB_FIXED = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 } as unknown as ViewStyle
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   section: { gap: spacing.s },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s },
   chip: { minHeight: 40, paddingHorizontal: spacing.l, borderRadius: radius.full, justifyContent: 'center', backgroundColor: colors.surface },
@@ -340,10 +396,13 @@ const styles = StyleSheet.create({
   cover: { width: '100%', aspectRatio: 4 / 3 },
   coverEmpty: { backgroundColor: colors.surfaceHighlight },
   cardText: { padding: spacing.s, gap: spacing.xs },
-  hoverOverlay: { backgroundColor: 'rgba(255, 255, 255, 0.97)', zIndex: 1000 },
-  pinnedBackdrop: { flex: 1, backgroundColor: 'rgba(255, 255, 255, 0.97)' },
+  // pointerEvents none no próprio contêiner: senão ele cobre o card, o mouse "sai" dele e a prévia pisca.
+  hoverOverlay: { backgroundColor: colors.overlay, zIndex: 1000, pointerEvents: 'none' },
+  pinnedBackdrop: { flex: 1, backgroundColor: colors.overlay },
   fullScroll: { alignItems: 'center', padding: spacing.l, paddingTop: spacing.xxxl },
-  fullWrap: { width: '100%', maxWidth: 900 },
+  readerScroll: { alignItems: 'center', paddingHorizontal: spacing.xs, paddingBottom: spacing.l, paddingTop: spacing.xxxl },
+  fullWrap: { width: '100%' },
   fullPanel: { width: '100%', maxWidth: 900, gap: spacing.s },
+  toTop: { position: 'absolute', right: spacing.l, bottom: spacing.l, width: 48, height: 48, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
   close: { position: 'absolute', top: spacing.m, right: spacing.l, minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.full },
 })

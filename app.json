@@ -4,9 +4,9 @@
     "slug": "folha-do-brasil",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/logo.png",
+    "icon": "./assets/images/icon.png",
     "scheme": "folhadobrasil",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"

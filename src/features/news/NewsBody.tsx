@@ -5,6 +5,12 @@ import { Text } from '../../components'
 import { spacing } from '../../theme'
 import { parseNews, type Inline } from './parseNews'
 
+export interface NewsPoll {
+  id: number
+  question: string
+  options: { id: number; text: string; votes: number }[]
+}
+
 export interface NewsPost {
   id: number
   title: string
@@ -13,6 +19,10 @@ export interface NewsPost {
   publishedAtUtc: string
   viewCount: number
   topicId: number | null
+  author: string | null
+  updatedAtUtc: string
+  videoUrl: string | null
+  poll: NewsPoll | null
 }
 
 export interface NewsTopic {
@@ -49,7 +59,7 @@ export function PostImage({ uri, width = '100%' }: { uri: string; width?: `${num
 
 const HEADING_SIZE = [30, 24, 20, 17, 15, 13]
 
-function Inlines({ parts }: { parts: Inline[] }) {
+function Inlines({ parts, size }: { parts: Inline[]; size?: object }) {
   return (
     <>
       {parts.map((part, index) => (
@@ -57,7 +67,7 @@ function Inlines({ parts }: { parts: Inline[] }) {
           key={index}
           variant={part.bold ? 'bodyStrong' : 'body'}
           color="textSecondary"
-          style={part.italic ? styles.italic : undefined}
+          style={[size, part.italic && styles.italic]}
         >
           {part.text}
         </Text>
@@ -67,9 +77,11 @@ function Inlines({ parts }: { parts: Inline[] }) {
 }
 
 // Corpo em mini-Markdown (ver parseNews.ts): títulos 1–6, negrito, itálico e imagens em qualquer lugar.
-export function NewsBody({ body }: { body: string }) {
+// `fontSize` liga o modo leitura: texto maior, entrelinha folgada e justificado.
+export function NewsBody({ body, fontSize }: { body: string; fontSize?: number }) {
+  const size = fontSize ? { fontSize, lineHeight: Math.round(fontSize * 1.7) } : undefined
   return (
-    <View style={styles.body}>
+    <View style={[styles.body, size && styles.reading]}>
       {parseNews(body).map((block, index) => {
         if (block.type === 'image') return <PostImage key={index} uri={block.url} />
         if (block.type === 'heading') {
@@ -81,8 +93,8 @@ export function NewsBody({ body }: { body: string }) {
           )
         }
         return (
-          <Text key={index} variant="body" color="textSecondary">
-            <Inlines parts={block.inline} />
+          <Text key={index} variant="body" color="textSecondary" style={size && [size, styles.justify]}>
+            <Inlines parts={block.inline} size={size} />
           </Text>
         )
       })}
@@ -92,6 +104,8 @@ export function NewsBody({ body }: { body: string }) {
 
 const styles = StyleSheet.create({
   body: { gap: spacing.xs },
+  reading: { gap: 14 },
+  justify: { textAlign: 'justify' },
   italic: { fontStyle: 'italic' },
   // maxHeight: imagens altas/quadradas não podem passar da tela; contentFit "contain" mantém a proporção.
   image: { borderRadius: 8, alignSelf: 'center', maxHeight: 480 },
