@@ -1,6 +1,7 @@
 import { ApiError, NetworkError, apiErrorFromResponse } from './apiError'
 
 // Sem EXPO_PUBLIC_API_BASE_URL (sem barra final), as chamadas vão para a mesma origem.
+// O Expo embute o valor no build: mudou a variável, refaça o build limpando o cache do Metro.
 const BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL ?? '').trim().replace(/\/+$/, '')
 
 export interface ApiRequestOptions {

@@ -9,7 +9,7 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test": "jest",
-    "build:web": "expo export --platform web --clear"
+    "build:web": "node -e \"console.log('API_URL no build: ' + process.env.EXPO_PUBLIC_API_BASE_URL)\" && expo export --platform web --clear"
   },
   "dependencies": {
     "@expo-google-fonts/manrope": "^0.4.2",
